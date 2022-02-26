@@ -65,7 +65,7 @@ fn main() {
     println!(); // Put a newline over and under the ASCII table to make it more readable!
     println!("#\tSHA256{}\t{}",
              " ".repeat(64 - "SHA256".len()),
-             args.directories.iter().map(|dir| fixed_length(dir.file_name().unwrap().to_str().unwrap(), args.colwidth, " ")).collect::<Vec<String>>().join("\t")
+             args.directories.iter().map(|dir: &PathBuf| fixed_length(dir.file_name().map( |os_str| os_str.to_str()).flatten().unwrap_or("???"), args.colwidth, " ")).collect::<Vec<String>>().join("\t")
     );
 
     // Turn the HashMap into a Vec to be able to sort it by hash:
