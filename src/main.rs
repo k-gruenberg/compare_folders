@@ -26,6 +26,12 @@ struct Args {
     /// The width of each column in the output ASCII table
     #[clap(long, default_value_t=20)]
     colwidth: usize,
+
+    /// With this flag, only the differences are listed, i.e. only those files are outputted that
+    /// either (a) don't occur in all folders, or (b) don't have the same name in all folders, or
+    /// (c) occur more than once in at least one folder
+    #[clap(long)]
+    diffonly: bool,
 }
 
 fn main() {
@@ -73,6 +79,18 @@ fn main() {
     hash_to_files.sort_unstable_by(|(hash1, _), (hash2, _)| hash1.cmp(&hash2)); // sort_unstable_by_key would require inefficient cloning!
     // Note: without sorting, the order of the output would be different everytime – which is not that nice.
 
+    // Take care of the "--diffonly" flag, if it is set:
+    if args.diffonly {
+        // Retain only those listings for files/hashes that...
+        hash_to_files.retain(|(_hash, files)|
+            files.len() != args.directories.len() // ...either (a) don't occur in all folders, or (c) occur more than once in at least one folder
+            || !files.iter().all(|file| file.file_name() == files[0].file_name()) // ...or (b) don't have the same name in all folders
+            // Note: `files[0]` won't panic because files.len() == args.directories.len() >= 1
+            // Note: When the name of two files is equal, they have to be in different folders!
+        );
+    }
+
+    // Do the actual print-out:
     let mut counter = 1;
     for (hash, files) in hash_to_files {
         println!("{}\t{}\t{}",
