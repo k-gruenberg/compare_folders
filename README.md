@@ -22,7 +22,12 @@ ARGS:
 
 OPTIONS:
         --colwidth <COLWIDTH>      The width of each column in the output ASCII table [default: 20]
+        --diffonly                 With this flag, only the differences are listed, i.e. only those
+                                   files are outputted that either (a) don't occur in all folders,
+                                   or (b) don't have the same name in all folders, or (c) occur more
+                                   than once in at least one folder
         --extension <EXTENSION>    Optional filter: only regard files with this extension
     -h, --help                     Print help information
     -V, --version                  Print version information
+
 ```
