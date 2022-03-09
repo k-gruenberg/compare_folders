@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::io::{BufReader, Error, Read};
 use std::fs::File;
@@ -29,9 +29,17 @@ struct Args {
 
     /// With this flag, only the differences are listed, i.e. only those files are outputted that
     /// either (a) don't occur in all folders, or (b) don't have the same name in all folders, or
-    /// (c) occur more than once in at least one folder
+    /// (c) occur more than once in at least one folder.
+    /// This is NOT the exact opposite of the --commononly flag!
     #[clap(long)]
     diffonly: bool,
+
+    /// With this flag, only the commonalities are listed, i.e. only those files are outputted that
+    /// occur in more than one folder but not necessarily in all of the folders and not necessarily
+    /// under the same name. Files that occur more than once but only in one folder are not listed.
+    /// This is NOT the exact opposite of the --diffonly flag!
+    #[clap(long)]
+    commononly: bool,
 }
 
 fn main() {
@@ -87,6 +95,18 @@ fn main() {
             || !files.iter().all(|file| file.file_name() == files[0].file_name()) // ...or (b) don't have the same name in all folders
             // Note: `files[0]` won't panic because files.len() == args.directories.len() >= 1
             // Note: When the name of two files is equal, they have to be in different folders!
+        );
+        // In other words: Ignore those files that occur exactly `args.directories.len()` times under the same name, i.e.
+        //                 those that occur in each of the folders exactly once, always under the same name.
+    }
+
+    // Take care of the "--commononly" flag, if it is set:
+    if args.commononly {
+        // Retain only those listings for files/hashes that occur in more than one folder:
+        hash_to_files.retain(|(_hash, files)|
+            files.iter().map(|file| file.parent().unwrap()).collect::<HashSet<&Path>>().len() > 1
+            // Note: Calling `file.parent().unwrap()` is safe because all files were originally read from
+            //       a directory and therefore definitely have a parent!
         );
     }
 
