@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
-use std::io::{BufReader, Error, Read};
+use std::io::{BufRead, BufReader, Error, Read};
 use std::fs::File;
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -26,6 +26,10 @@ struct Args {
     /// The width of each column in the output ASCII table
     #[clap(long, default_value_t=20)]
     colwidth: usize,
+
+    /// Supply this flag to replace all occurrences of CRLF with LF in all input files.
+    #[clap(long)]
+    crlf: bool,
 
     /// With this flag, only the differences are listed, i.e. only those files are outputted that
     /// either (a) don't occur in all folders, or (b) don't have the same name in all folders, or
@@ -60,7 +64,7 @@ fn main() {
                             Ok(file) => {
                                 let file: PathBuf = file.path(); // Turn a DirEntry into a PathBuf.
                                 if args.extension == None || args.extension == file.extension().map(|os_str| os_str.to_os_string()) {
-                                    match file_hash(&file) {
+                                    match file_hash(&file, args.crlf) {
                                         Ok(hash) => hash_to_files.entry(hash).or_insert(Vec::new()).push(file),
                                         Err(error) => eprintln!("{}", Red.paint(format!("Error: An error occurred while hashing {}: {}", file.display(), error)))
                                     }
@@ -142,25 +146,43 @@ fn fixed_length(s: &str, len: usize, padding: &str) -> String {
 }
 
 /// Hashes the content of a given file (computes the digest).
-fn file_hash<P: AsRef<Path>>(file_path: P) -> Result<String, Error> {
+fn file_hash<P: AsRef<Path>>(file_path: P, crlf: bool) -> Result<String, Error> {
     // cf. https://rust-lang-nursery.github.io/rust-cookbook/cryptography/hashing.html
     let file: File = File::open(file_path)?;
     let reader: BufReader<File> = BufReader::new(file);
-    let digest: Digest = sha256_digest(reader)?;
+    let digest: Digest = sha256_digest(reader, crlf)?;
     Ok(HEXUPPER.encode(digest.as_ref()))
 }
 
 /// Copied from https://rust-lang-nursery.github.io/rust-cookbook/cryptography/hashing.html
-fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, Error> {
+fn sha256_digest<R: Read>(mut reader: R, crlf: bool) -> Result<Digest, Error> {
     let mut context = Context::new(&SHA256);
-    let mut buffer = [0; 1024];
 
-    loop {
-        let count = reader.read(&mut buffer)?;
-        if count == 0 {
-            break;
+    if !crlf {  // Without the --crlf flag, we can compute the hash in a straightforward way:
+
+        let mut buffer = [0; 1024];
+        loop {
+            let count = reader.read(&mut buffer)?;
+            if count == 0 { break; }
+            context.update(&buffer[..count]);
         }
-        context.update(&buffer[..count]);
+
+    } else {  // With the --crlf flag, we replace all CRLF with LF and things become a bit more complex:
+
+        let mut buf_reader = BufReader::new(reader);
+        let mut buf = Vec::with_capacity(1024);
+        loop {
+            buf.clear();
+            let count = buf_reader.read_until(b'\n', &mut buf)?;
+            if count == 0 { break; }
+            if buf.ends_with(b"\r\n") {
+                buf.pop(); // remove '\n'
+                buf.pop(); // remove '\r'
+                buf.push(b'\n');
+            }
+            context.update(&buf);
+        }
+
     }
 
     Ok(context.finish())
